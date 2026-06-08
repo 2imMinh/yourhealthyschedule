@@ -72,7 +72,18 @@ export async function handle(
       // Unique constraint violation -> 409 Conflict
       if (err.code === "P2025") return errorResponse(404, "NOT_FOUND", "Record not found");
       if (err.code === "P2002") return errorResponse(409, "CONFLICT", "Resource already exists");
+      // Log the real Prisma code/meta server-side (visible in Vercel logs) but
+      // return a clean, generic message — never leak internals to the client.
+      console.error("[api] prisma error:", err.code, err.message, err.meta);
       return errorResponse(400, "DB_ERROR", "Database request failed");
+    }
+    // Prisma initialization / connection failures (can't reach DB, bad URL, etc.)
+    if (
+      err instanceof Prisma.PrismaClientInitializationError ||
+      err instanceof Prisma.PrismaClientRustPanicError
+    ) {
+      console.error("[api] prisma init/connection error:", err);
+      return errorResponse(503, "DB_UNAVAILABLE", "Cannot reach the database");
     }
 
     // Unknown: log server-side, return opaque 500 (never leak internals).

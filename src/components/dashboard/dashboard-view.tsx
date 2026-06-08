@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, AlertTriangle, Loader2, ShieldAlert, ChevronLeft, ChevronRight, Pencil, List, Table2, PieChart } from "lucide-react";
+import { Sparkles, AlertTriangle, Loader2, ShieldAlert, ChevronLeft, ChevronRight, Pencil, List, Table2, PieChart, Plus } from "lucide-react";
 import { api, ApiClientError } from "@/lib/api";
 import { formatTime, cn } from "@/lib/utils";
 import { activityMeta } from "@/components/schedule/activity-meta";
@@ -16,6 +16,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { DayCircle } from "@/components/schedule/day-circle";
 import { BlocksTable } from "@/components/schedule/blocks-table";
+import { AddEventDialog } from "@/components/schedule/add-event-dialog";
 import { Label } from "@/components/ui/label";
 import {
   Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle,
@@ -52,6 +53,7 @@ export function DashboardView() {
   const [maxDays, setMaxDays] = useState(3); // mặc định free; cập nhật sau khi biết gói
   const [isPremium, setIsPremium] = useState(false);
   const [view, setView] = useState<"list" | "table" | "pie">("list");
+  const [addEventOpen, setAddEventOpen] = useState(false);
   const [offset, setOffset] = useState(0); // 0 = hôm nay
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [warnings, setWarnings] = useState<Warning[]>([]);
@@ -163,7 +165,9 @@ export function DashboardView() {
   }
 
   function blockLabel(b: Block) {
-    if (b.activityType === "TASK") return b.title ?? t("act.TASK");
+    // Show the user-entered name for tasks AND fixed activities/events;
+    // health blocks (sleep/meal/…) have no title and fall back to the type label.
+    if (b.title && b.title.trim()) return b.title;
     return t(`act.${b.activityType}`);
   }
 
@@ -202,7 +206,11 @@ export function DashboardView() {
           <Button variant="ghost" size="sm" onClick={() => setOffset(0)}>{t("dash.today")}</Button>
         )}
       </div>
-      <div className="flex gap-2">
+      <div className="flex flex-wrap gap-2">
+        <Button variant="outline" size="sm" onClick={() => setAddEventOpen(true)} disabled={generating}>
+          <Plus className="mr-1 h-4 w-4" />
+          {t("sched.addEvent")}
+        </Button>
         <Button variant="outline" size="sm" onClick={() => setEmergencyOpen(true)} disabled={generating}>
           <ShieldAlert className="mr-1 h-4 w-4" />
           {t("dash.emergency")}
@@ -218,6 +226,8 @@ export function DashboardView() {
   return (
     <div className="space-y-5">
       {dayNav}
+
+      <AddEventDialog open={addEventOpen} onOpenChange={setAddEventOpen} onCreated={() => generate("STANDARD")} />
 
       {maxDays < 7 && atRangeEnd && (
         <p className="text-center text-xs text-muted-foreground">{t("dash.premiumRange")}</p>
