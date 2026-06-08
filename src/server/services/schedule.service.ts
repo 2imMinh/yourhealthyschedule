@@ -108,7 +108,14 @@ export async function generateAndPersistSchedule(
   const productivity = await loadProductivityWindows(userId, input.date);
 
   // User-defined fixed commitments (timetable, work shifts) -> engine fixed events.
-  const commitmentRows = await prisma.fixedCommitment.findMany({ where: { userId } });
+  // Wrapped defensively: if the FixedCommitment table is missing (migration not
+  // applied yet) we log and continue rather than failing the whole generation.
+  let commitmentRows: Awaited<ReturnType<typeof prisma.fixedCommitment.findMany>> = [];
+  try {
+    commitmentRows = await prisma.fixedCommitment.findMany({ where: { userId } });
+  } catch (e) {
+    console.warn("[schedule] could not load fixed commitments — did you run prisma migrate?", e);
+  }
   const hhmmToMin = (s: string) => {
     const [h, m] = s.split(":").map(Number);
     return (h || 0) * 60 + (m || 0);
@@ -178,64 +185,68 @@ async function persist(
     (byDay.get(dayIdx) ?? byDay.set(dayIdx, []).get(dayIdx)!).push(b);
   }
 
-  await prisma.$transaction(async (tx) => {
-    for (const [dayIdx, dayBlocks] of byDay) {
-      const dateStr = base.plus({ days: dayIdx }).toISODate()!;
-      const dateOnly = new Date(`${dateStr}T00:00:00.000Z`);
-      const totalSleep = dayBlocks
-        .filter((b) => b.activityType === "SLEEP")
-        .reduce((s, b) => s + (b.endMinute - b.startMinute), 0);
+  // NOTE: we intentionally DO NOT use an interactive transaction here.
+  // Prisma interactive transactions ($transaction(async (tx) => ...)) are not
+  // compatible with Neon's pooled (PgBouncer) connection on serverless — they
+  // fail with "Transaction not found". These writes are idempotent (per-day
+  // delete + recreate), so running them directly on `prisma` is safe: a partial
+  // failure is fully repaired by regenerating.
+  for (const [dayIdx, dayBlocks] of byDay) {
+    const dateStr = base.plus({ days: dayIdx }).toISODate()!;
+    const dateOnly = new Date(`${dateStr}T00:00:00.000Z`);
+    const totalSleep = dayBlocks
+      .filter((b) => b.activityType === "SLEEP")
+      .reduce((s, b) => s + (b.endMinute - b.startMinute), 0);
 
-      const schedule = await tx.dailySchedule.upsert({
-        where: { userId_date: { userId, date: dateOnly } },
-        create: {
-          userId,
-          date: dateOnly,
-          mode: input.mode,
-          totalSleepMinutes: totalSleep,
-          generationMeta: meta as unknown as Prisma.InputJsonValue,
-        },
-        update: {
-          mode: input.mode,
-          totalSleepMinutes: totalSleep,
-          generationMeta: meta as unknown as Prisma.InputJsonValue,
-        },
-      });
+    const schedule = await prisma.dailySchedule.upsert({
+      where: { userId_date: { userId, date: dateOnly } },
+      create: {
+        userId,
+        date: dateOnly,
+        mode: input.mode,
+        totalSleepMinutes: totalSleep,
+        generationMeta: meta as unknown as Prisma.InputJsonValue,
+      },
+      update: {
+        mode: input.mode,
+        totalSleepMinutes: totalSleep,
+        generationMeta: meta as unknown as Prisma.InputJsonValue,
+      },
+    });
 
-      // Replace blocks for an idempotent regeneration.
-      await tx.scheduleBlock.deleteMany({ where: { scheduleId: schedule.id } });
-      await tx.scheduleBlock.createMany({
-        data: dayBlocks.map((b) => ({
-          scheduleId: schedule.id,
-          activityType: b.activityType as ActivityType,
-          title: b.title ?? null,
-          taskId: b.taskId ?? null,
-          startTime: offsetToDate(base, b.startMinute),
-          endTime: offsetToDate(base, b.endMinute),
-          isFixed: b.isFixed,
-          isHealthBlock: b.isHealthBlock,
-        })),
-      });
-    }
+    // Replace blocks for an idempotent regeneration.
+    await prisma.scheduleBlock.deleteMany({ where: { scheduleId: schedule.id } });
+    await prisma.scheduleBlock.createMany({
+      data: dayBlocks.map((b) => ({
+        scheduleId: schedule.id,
+        activityType: b.activityType as ActivityType,
+        title: b.title ?? null,
+        taskId: b.taskId ?? null,
+        startTime: offsetToDate(base, b.startMinute),
+        endTime: offsetToDate(base, b.endMinute),
+        isFixed: b.isFixed,
+        isHealthBlock: b.isHealthBlock,
+      })),
+    });
+  }
 
-    // Mark tasks that received at least one block as SCHEDULED.
-    const scheduledTaskIds = Array.from(
-      new Set(blocks.filter((b) => b.taskId).map((b) => b.taskId as string)),
-    );
-    if (scheduledTaskIds.length) {
-      await tx.task.updateMany({
-        where: { id: { in: scheduledTaskIds }, status: "PENDING" },
-        data: { status: "SCHEDULED" },
-      });
-    }
+  // Mark tasks that received at least one block as SCHEDULED.
+  const scheduledTaskIds = Array.from(
+    new Set(blocks.filter((b) => b.taskId).map((b) => b.taskId as string)),
+  );
+  if (scheduledTaskIds.length) {
+    await prisma.task.updateMany({
+      where: { id: { in: scheduledTaskIds }, status: "PENDING" },
+      data: { status: "SCHEDULED" },
+    });
+  }
 
-    // Record non-standard modes for the once-per-48h rule.
-    if (input.mode !== "STANDARD") {
-      await tx.overloadEvent.create({
-        data: { userId, date: new Date(`${input.date}T00:00:00.000Z`), mode: input.mode },
-      });
-    }
-  });
+  // Record non-standard modes for the once-per-48h rule.
+  if (input.mode !== "STANDARD") {
+    await prisma.overloadEvent.create({
+      data: { userId, date: new Date(`${input.date}T00:00:00.000Z`), mode: input.mode },
+    });
+  }
 }
 
 async function loadProductivityWindows(
