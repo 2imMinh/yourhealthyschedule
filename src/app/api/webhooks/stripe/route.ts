@@ -117,33 +117,10 @@ export async function POST(req: NextRequest) {
       }
       case "invoice.payment_succeeded":
       case "invoice.payment_failed": {
+        // Payment history isn't persisted in this MVP — subscription state is
+        // the source of truth and is synced via the subscription.* events above.
         const invoice = event.data.object as Stripe.Invoice;
-        const customerId =
-          typeof invoice.customer === "string"
-            ? invoice.customer
-            : invoice.customer?.id;
-        const row = customerId
-          ? await prisma.subscription.findFirst({
-              where: { stripeCustomerId: customerId },
-              select: { userId: true },
-            })
-          : null;
-        if (row && invoice.id) {
-          await prisma.payment.upsert({
-            where: { stripeInvoiceId: invoice.id },
-            create: {
-              userId: row.userId,
-              stripeInvoiceId: invoice.id,
-              amountCents: invoice.amount_paid ?? invoice.amount_due ?? 0,
-              currency: invoice.currency ?? "usd",
-              status: event.type === "invoice.payment_succeeded" ? "paid" : "failed",
-              paidAt: event.type === "invoice.payment_succeeded" ? new Date() : null,
-            },
-            update: {
-              status: event.type === "invoice.payment_succeeded" ? "paid" : "failed",
-            },
-          });
-        }
+        console.log(`[stripe webhook] ${event.type}`, invoice.id);
         break;
       }
       default:

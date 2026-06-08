@@ -67,7 +67,7 @@ cd ai-healthy-scheduler
 Trong Terminal, gõ lần lượt (chờ mỗi lệnh chạy xong mới gõ lệnh tiếp):
 
 ```bash
-npm install
+npm.cmd install
 ```
 > Lệnh này tải về tất cả "linh kiện" ứng dụng cần. Sẽ mất vài phút và hiện nhiều dòng chữ — đó là bình thường.
 > Nếu bạn đang dùng PowerShell mà thấy lỗi kiểu `npm.ps1 cannot be loaded because running scripts is disabled on this system`, hãy dùng lệnh `npm.cmd install` thay cho `npm install`, hoặc đổi Terminal sang **Command Prompt** rồi chạy lại.
@@ -136,18 +136,18 @@ Nhớ **lưu file** sau khi dán xong tất cả.
 
 1. Tạo cấu trúc bảng trong Neon:
 ```bash
-npx prisma migrate dev --name init
+npx.cmd prisma migrate dev --name init
 ```
 > Lệnh này "dựng kệ" trong kho dữ liệu để chứa người dùng, công việc, lịch.
 
 2. (Tùy chọn) Thêm dữ liệu mẫu để có cái mà xem:
 ```bash
-npm run db:seed
+npm.cmd run db:seed
 ```
 
 3. Chạy thử ứng dụng:
 ```bash
-npm run dev
+npm.cmd run dev
 ```
 > Khi thấy dòng chữ báo `localhost:3000`, hãy mở trình duyệt và vào địa chỉ **`http://localhost:3000`**. Ứng dụng đang chạy trên máy bạn!
 
@@ -168,7 +168,7 @@ npm run dev
 4. Bấm **Deploy** và chờ vài phút.
 5. Sau khi xong, dựng bảng cho kho dữ liệu bản chạy thật. Cách đơn giản: trong Terminal trên máy bạn, chạy:
 ```bash
-npx prisma migrate deploy
+npx.cmd prisma migrate deploy
 ```
 > (Lệnh này dùng đúng `DATABASE_URL`/`DIRECT_URL` của Neon mà bạn đã điền.)
 
