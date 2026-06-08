@@ -114,6 +114,14 @@ export interface BaseLayout {
   horizonEnd: Minutes;
 }
 
+/** Add n days to a YYYY-MM-DD string (UTC-safe), returning YYYY-MM-DD. */
+function addDaysStr(dateStr: string, n: number): string {
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() + n);
+  return dt.toISOString().slice(0, 10);
+}
+
 export function layoutConstraints(input: EngineInput): BaseLayout {
   const p: EngineProfile = input.profile;
   const floor = input.overrides?.minSleepMinutes ?? p.minSleepMinutes;
@@ -151,6 +159,27 @@ export function layoutConstraints(input: EngineInput): BaseLayout {
         isHealthBlock: false,
       });
       workBusy.push({ startMinute: wStart, endMinute: wEnd });
+    }
+
+    // 1b) User-defined fixed commitments (timetable, work shifts) for this day,
+    //     respecting weekday and the [startDate, endDate] range. Treated like work.
+    const dateStr = addDaysStr(input.startDate, d);
+    for (const fe of input.fixedEvents ?? []) {
+      if (!fe.days.includes(weekday)) continue;
+      if (fe.startDate && dateStr < fe.startDate) continue;
+      if (fe.endDate && dateStr > fe.endDate) continue;
+      const fStart = d * MIN_PER_DAY + fe.startMinute;
+      const fEnd = d * MIN_PER_DAY + fe.endMinute;
+      if (fEnd <= fStart) continue;
+      blocks.push({
+        activityType: fe.activityType,
+        title: fe.title,
+        startMinute: fStart,
+        endMinute: fEnd,
+        isFixed: true,
+        isHealthBlock: false,
+      });
+      workBusy.push({ startMinute: fStart, endMinute: fEnd });
     }
 
     // 2) Sleep — anchored to end at next wake; shrink toward floor if a fixed

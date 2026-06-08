@@ -36,6 +36,16 @@ export interface EngineWorkBlock {
   endMinute: Minutes;
 }
 
+export interface EngineFixedEvent {
+  title: string;
+  activityType: EngineActivityType;
+  days: number[]; // 0=Sun .. 6=Sat
+  startMinute: Minutes;
+  endMinute: Minutes;
+  startDate?: string | null; // "YYYY-MM-DD" inclusive
+  endDate?: string | null; // "YYYY-MM-DD" inclusive (null = open-ended)
+}
+
 export interface EngineProfile {
   timezone: string;
   wakeMinute: Minutes; // from midnight
@@ -86,6 +96,7 @@ export interface EngineInput {
   productivity: ProductivityWindow[];
   /** When true (default), meals can't start after their fixed caps (08:30/13:00/20:00). Premium passes false. */
   enforceMealCaps?: boolean;
+  fixedEvents?: EngineFixedEvent[]; // user-defined recurring commitments
   overrides?: RelaxationOverrides;
 }
 

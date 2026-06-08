@@ -99,6 +99,7 @@ model User {
   predictions  Prediction[]
   overloads    OverloadEvent[]
   dailyStats   DailyStat[]
+  commitments  FixedCommitment[]
 
   @@index([deletedAt])
 }
@@ -282,4 +283,20 @@ model Subscription {
   updatedAt            DateTime           @updatedAt @db.Timestamptz
 
   @@index([status, currentPeriodEnd])
+}
+
+model FixedCommitment {
+  id           String       @id @default(cuid())
+  userId       String
+  user         User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title        String
+  activityType ActivityType @default(WORK)
+  daysOfWeek   Int[]        // 0=Sun .. 6=Sat
+  startTime    String       // "HH:mm"
+  endTime      String       // "HH:mm"
+  startDate    DateTime     @db.Date
+  endDate      DateTime?    @db.Date
+  createdAt    DateTime     @default(now())
+
+  @@index([userId])
 }

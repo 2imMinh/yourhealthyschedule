@@ -107,6 +107,22 @@ export async function generateAndPersistSchedule(
 
   const productivity = await loadProductivityWindows(userId, input.date);
 
+  // User-defined fixed commitments (timetable, work shifts) -> engine fixed events.
+  const commitmentRows = await prisma.fixedCommitment.findMany({ where: { userId } });
+  const hhmmToMin = (s: string) => {
+    const [h, m] = s.split(":").map(Number);
+    return (h || 0) * 60 + (m || 0);
+  };
+  const fixedEvents = commitmentRows.map((c) => ({
+    title: c.title,
+    activityType: c.activityType,
+    days: c.daysOfWeek,
+    startMinute: hhmmToMin(c.startTime),
+    endMinute: hhmmToMin(c.endTime),
+    startDate: c.startDate ? c.startDate.toISOString().slice(0, 10) : null,
+    endDate: c.endDate ? c.endDate.toISOString().slice(0, 10) : null,
+  }));
+
   // Generate the full day regardless of the current clock time: only the date
   // matters, not "now". Starting at 0 keeps the morning from being trimmed.
   const nowMinute = 0;
@@ -121,6 +137,7 @@ export async function generateAndPersistSchedule(
     tasks,
     productivity,
     enforceMealCaps: !isPremiumUser, // free users are locked to meal-time caps
+    fixedEvents,
   };
 
   const result = generate(engineInput);

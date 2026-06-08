@@ -31,6 +31,18 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return json.data as T;
 }
 
+export interface Commitment {
+  id: string;
+  title: string;
+  activityType: string;
+  daysOfWeek: number[];
+  startTime: string;
+  endTime: string;
+  startDate: string;
+  endDate: string;
+}
+export type CommitmentBody = Omit<Commitment, "id">;
+
 export const api = {
   // Tasks
   listTasks: (status?: string) =>
@@ -64,6 +76,16 @@ export const api = {
     request("/schedule/generate", { method: "POST", body: JSON.stringify(body) }),
   getSchedule: (date: string, rangeDays = 1) =>
     request(`/schedule?date=${date}&rangeDays=${rangeDays}`),
+
+  // Fixed commitments (timetable / work schedule)
+  listCommitments: () =>
+    request<{ commitments: Commitment[] }>("/commitments"),
+  createCommitment: (body: CommitmentBody) =>
+    request("/commitments", { method: "POST", body: JSON.stringify(body) }),
+  updateCommitment: (id: string, body: CommitmentBody) =>
+    request(`/commitments/${id}`, { method: "PATCH", body: JSON.stringify(body) }),
+  deleteCommitment: (id: string) =>
+    request(`/commitments/${id}`, { method: "DELETE" }),
 
   // Schedule blocks (manual time edits)
   updateBlock: (blockId: string, body: { startTime: string; endTime: string }) =>

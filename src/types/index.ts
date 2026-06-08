@@ -104,6 +104,25 @@ export const accountSchema = z.object({
 });
 export type AccountInput = z.infer<typeof accountSchema>;
 
+export const CommitmentTypeEnum = z.enum([
+  "WORK",
+  "STUDY",
+  "COMMUTE",
+  "SOCIAL",
+  "ENTERTAINMENT",
+  "COOKING",
+]);
+export const commitmentSchema = z.object({
+  title: z.string().min(1).max(120),
+  activityType: CommitmentTypeEnum.default("WORK"),
+  daysOfWeek: z.array(z.number().int().min(0).max(6)).min(1, "Pick at least one day"),
+  startTime: z.string().regex(/^\d{2}:\d{2}$/, "HH:mm"),
+  endTime: z.string().regex(/^\d{2}:\d{2}$/, "HH:mm"),
+  startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD"),
+  endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "YYYY-MM-DD").optional().or(z.literal("")),
+});
+export type CommitmentInput = z.infer<typeof commitmentSchema>;
+
 // --------------------------- Schedule --------------------------------
 
 export const generateScheduleSchema = z.object({
