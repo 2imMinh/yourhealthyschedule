@@ -130,7 +130,8 @@ export type WarningCode =
   | "TASK_AT_RISK"
   | "TASK_MIGRATED"
   | "OVERLOADED"
-  | "HEALTH_BLOCK_SKIPPED";
+  | "HEALTH_BLOCK_SKIPPED"
+  | "ACTIVITY_OVERLAP";
 
 export interface Warning {
   code: WarningCode;

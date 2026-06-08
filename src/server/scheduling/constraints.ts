@@ -220,7 +220,7 @@ export function layoutConstraints(input: EngineInput): BaseLayout {
     //    free users; Premium passes enforceMealCaps=false to lift them.
     const MEAL_CAPS = [8 * 60 + 30, 13 * 60, 20 * 60]; // minutes from local midnight
     const capsOn = input.enforceMealCaps !== false;
-    const busyForMeals = [...hardBusy];
+    const busyForMeals = [...hardBusy, ...workBusy]; // tránh cả giờ làm/sự kiện cố định
     p.mealMinutes.forEach((m, mi) => {
       let pref = d * MIN_PER_DAY + m;
       let latest = dayEnd;
@@ -233,22 +233,30 @@ export function layoutConstraints(input: EngineInput): BaseLayout {
       if (pref >= dayEnd) return;
       const lo = Math.max(dayStart, pref - 90);
       const hi = Math.min(latest, pref + 120);
-      const at =
+      const freeAt =
         firstFreeForward(busyForMeals, pref, hi, p.mealDurationMinutes) ??
         firstFreeForward(busyForMeals, lo, hi, p.mealDurationMinutes) ??
-        firstFreeForward(busyForMeals, dayStart, latest, p.mealDurationMinutes);
-      if (at !== null) {
-        const block = {
-          activityType: "MEAL" as const,
-          title: "Meal",
-          startMinute: at,
-          endMinute: at + p.mealDurationMinutes,
-          isFixed: false,
-          isHealthBlock: true,
-        };
-        blocks.push(block);
-        hardBusy.push({ startMinute: block.startMinute, endMinute: block.endMinute });
-        busyForMeals.push({ startMinute: block.startMinute, endMinute: block.endMinute });
+        firstFreeForward(busyForMeals, dayStart, latest, p.mealDurationMinutes) ??
+        firstFreeForward(busyForMeals, dayStart, dayEnd, p.mealDurationMinutes);
+      // Overlap is allowed ONLY as a last resort (no free slot left in the day).
+      const at = freeAt ?? pref;
+      const block = {
+        activityType: "MEAL" as const,
+        title: "Meal",
+        startMinute: at,
+        endMinute: at + p.mealDurationMinutes,
+        isFixed: false,
+        isHealthBlock: true,
+      };
+      blocks.push(block);
+      hardBusy.push({ startMinute: block.startMinute, endMinute: block.endMinute });
+      busyForMeals.push({ startMinute: block.startMinute, endMinute: block.endMinute });
+      if (freeAt === null) {
+        warnings.push({
+          code: "ACTIVITY_OVERLAP",
+          message: `No free slot for a meal on day ${d + 1}; placed overlapping.`,
+          day: d,
+        });
       }
     });
 
@@ -256,23 +264,24 @@ export function layoutConstraints(input: EngineInput): BaseLayout {
     if (p.exerciseEnabled && p.exerciseMinutes > 0) {
       const busyForEx = [...hardBusy, ...workBusy];
       const preferStart = d * MIN_PER_DAY + (17 * 60 + 30); // 17:30
-      const at =
+      const freeAt =
         firstFreeForward(busyForEx, preferStart, dayEnd, p.exerciseMinutes) ??
         firstFreeForward(busyForEx, dayStart, dayEnd, p.exerciseMinutes);
-      if (at !== null) {
-        blocks.push({
-          activityType: "EXERCISE",
-          title: "Exercise",
-          startMinute: at,
-          endMinute: at + p.exerciseMinutes,
-          isFixed: false,
-          isHealthBlock: true,
-        });
-        hardBusy.push({ startMinute: at, endMinute: at + p.exerciseMinutes });
-      } else {
+      // Overlap only as a last resort, when the day has no free slot.
+      const at = freeAt ?? preferStart;
+      blocks.push({
+        activityType: "EXERCISE",
+        title: "Exercise",
+        startMinute: at,
+        endMinute: at + p.exerciseMinutes,
+        isFixed: false,
+        isHealthBlock: true,
+      });
+      hardBusy.push({ startMinute: at, endMinute: at + p.exerciseMinutes });
+      if (freeAt === null) {
         warnings.push({
-          code: "HEALTH_BLOCK_SKIPPED",
-          message: `No room to place exercise on day ${d + 1}.`,
+          code: "ACTIVITY_OVERLAP",
+          message: `No free slot for exercise on day ${d + 1}; placed overlapping.`,
           day: d,
         });
       }
@@ -307,5 +316,20 @@ export function layoutConstraints(input: EngineInput): BaseLayout {
   const free = freeWithin(taskBusy, scheduleStart, horizonEnd);
 
   blocks.sort((a, b) => a.startMinute - b.startMinute);
+
+  // Fixed activities (work / commitments / events) keep the exact time the user
+  // chose, so if two of them clash we can't auto-resolve it — surface a warning.
+  const fixedSorted = blocks.filter((b) => b.isFixed).sort((a, b) => a.startMinute - b.startMinute);
+  for (let i = 1; i < fixedSorted.length; i++) {
+    if (fixedSorted[i].startMinute < fixedSorted[i - 1].endMinute) {
+      warnings.push({
+        code: "ACTIVITY_OVERLAP",
+        message: `Two fixed activities overlap: "${fixedSorted[i - 1].title}" and "${fixedSorted[i].title}".`,
+        day: Math.floor(fixedSorted[i].startMinute / MIN_PER_DAY),
+      });
+      break;
+    }
+  }
+
   return { blocks, free, warnings, sleepMinutesByDay, horizonStart, horizonEnd };
 }
