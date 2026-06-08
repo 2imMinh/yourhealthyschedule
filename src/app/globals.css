@@ -1,0 +1,97 @@
+/* src/app/globals.css */
+@import "tailwindcss";
+
+/* ---- shadcn/ui token mapping (Tailwind v4 @theme) ---- */
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-card: var(--card);
+  --color-card-foreground: var(--card-foreground);
+  --color-popover: var(--popover);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-primary: var(--primary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-secondary: var(--secondary);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-muted: var(--muted);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-accent: var(--accent);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-border: var(--border);
+  --color-input: var(--input);
+  --color-ring: var(--ring);
+  --radius-lg: var(--radius);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-sm: calc(var(--radius) - 4px);
+  --font-sans: var(--font-hanken), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-fraunces), ui-serif, Georgia, serif;
+}
+
+/* ---- Palette: warm paper, sage, amber. Calm + focused. ---- */
+:root {
+  --background: hsl(40 33% 97%);
+  --foreground: hsl(155 14% 13%);
+  --card: hsl(40 40% 99%);
+  --card-foreground: hsl(155 14% 13%);
+  --popover: hsl(40 40% 99%);
+  --popover-foreground: hsl(155 14% 13%);
+  --primary: hsl(155 30% 32%);
+  --primary-foreground: hsl(40 33% 97%);
+  --secondary: hsl(40 20% 92%);
+  --secondary-foreground: hsl(155 14% 18%);
+  --muted: hsl(40 18% 91%);
+  --muted-foreground: hsl(155 8% 40%);
+  --accent: hsl(32 78% 52%);
+  --accent-foreground: hsl(30 40% 12%);
+  --destructive: hsl(8 65% 48%);
+  --destructive-foreground: hsl(40 33% 97%);
+  --border: hsl(40 14% 85%);
+  --input: hsl(40 14% 85%);
+  --ring: hsl(155 30% 32%);
+  --radius: 0.75rem;
+}
+
+.dark {
+  --background: hsl(155 18% 8%);
+  --foreground: hsl(40 20% 92%);
+  --card: hsl(155 16% 11%);
+  --card-foreground: hsl(40 20% 92%);
+  --popover: hsl(155 16% 11%);
+  --popover-foreground: hsl(40 20% 92%);
+  --primary: hsl(150 36% 56%);
+  --primary-foreground: hsl(155 18% 8%);
+  --secondary: hsl(155 12% 18%);
+  --secondary-foreground: hsl(40 20% 92%);
+  --muted: hsl(155 12% 16%);
+  --muted-foreground: hsl(40 10% 62%);
+  --accent: hsl(32 72% 56%);
+  --accent-foreground: hsl(30 40% 10%);
+  --destructive: hsl(8 60% 56%);
+  --destructive-foreground: hsl(40 20% 92%);
+  --border: hsl(155 10% 20%);
+  --input: hsl(155 10% 22%);
+  --ring: hsl(150 36% 56%);
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+  body {
+    background-color: var(--background);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    /* subtle paper grain via layered radial gradients */
+    background-image: radial-gradient(
+      hsl(155 14% 13% / 0.015) 1px,
+      transparent 1px
+    );
+    background-size: 4px 4px;
+  }
+  h1, h2, h3, .font-display {
+    font-family: var(--font-display);
+    letter-spacing: -0.02em;
+  }
+}

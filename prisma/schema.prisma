@@ -1,0 +1,285 @@
+// =====================================================================
+// prisma/schema.prisma  —  AI Healthy Scheduler MVP (Deliverable 2 of 8)
+// Conventions:
+//   - timestamptz for instants; @db.Date for the user's local calendar day
+//   - User-owned rows cascade-delete (GDPR erasure)
+//   - One-per-day uniqueness enforced at the DB layer (race-safe)
+//   - Indexes follow the app's real query patterns (see comments)
+// =====================================================================
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL") // pooled (PgBouncer) connection
+  directUrl = env("DIRECT_URL")   // direct connection for migrations
+}
+
+// ------------------------------- ENUMS -------------------------------
+
+enum SubscriptionTier {
+  FREE
+  PREMIUM
+}
+
+enum SubscriptionStatus {
+  TRIALING
+  ACTIVE
+  PAST_DUE
+  CANCELED
+  INCOMPLETE
+}
+
+enum TaskStatus {
+  PENDING
+  SCHEDULED
+  IN_PROGRESS
+  DONE
+  DEFERRED
+  CANCELED
+}
+
+enum Priority {
+  LOW
+  MEDIUM
+  HIGH
+  URGENT
+}
+
+enum ScheduleMode {
+  STANDARD
+  OVERLOAD
+  EMERGENCY
+}
+
+enum ActivityType {
+  SLEEP
+  MEAL
+  EXERCISE
+  WORK
+  STUDY
+  COOKING
+  ENTERTAINMENT
+  COMMUTE
+  SOCIAL
+  NAP
+  TASK
+  BUFFER
+}
+
+enum CompletionStatus {
+  COMPLETED
+  SKIPPED
+  PARTIAL
+}
+
+// ------------------------------- CORE --------------------------------
+
+model User {
+  id               String           @id // mirrors Clerk user id
+  email            String           @unique
+  name             String?
+  avatarUrl        String?
+  birthDate        DateTime?        @db.Date
+  timezone         String           @default("UTC")
+  locale           String           @default("en")
+  subscriptionTier SubscriptionTier @default(FREE)
+  createdAt        DateTime         @default(now()) @db.Timestamptz
+  updatedAt        DateTime         @updatedAt @db.Timestamptz
+  deletedAt        DateTime?        @db.Timestamptz
+
+  profile      UserProfile?
+  subscription Subscription?
+  tasks        Task[]
+  schedules    DailySchedule[]
+  completions  CompletionLog[]
+  productivity ProductivityProfile[]
+  predictions  Prediction[]
+  overloads    OverloadEvent[]
+  dailyStats   DailyStat[]
+
+  @@index([deletedAt])
+}
+
+model UserProfile {
+  id                 String   @id @default(cuid())
+  userId             String   @unique
+  user               User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  wakeTime           String   @default("06:30") // local HH:mm
+  sleepTime          String   @default("22:30")
+  targetSleepHours   Decimal  @default(8.0) @db.Decimal(3, 1)
+  minSleepHours      Decimal  @default(6.0) @db.Decimal(3, 1)
+  mealTimes          Json     @default("[\"06:30\",\"11:30\",\"19:00\"]")
+  exerciseEnabled    Boolean  @default(true)
+  exerciseMinutes    Int      @default(45)
+  napEnabled         Boolean  @default(false)
+  napMinutes         Int      @default(0)
+  commuteMinutes     Int      @default(0)
+  workBlocks         Json     @default("[]") // [{days:[1,2,3,4,5],start:"09:00",end:"18:00"}]
+  optionalActivities Json     @default("[]") // ["cooking","entertainment","social"]
+  createdAt          DateTime @default(now()) @db.Timestamptz
+  updatedAt          DateTime @updatedAt @db.Timestamptz
+}
+
+// --------------------------- TASKS -----------------------------------
+
+model Task {
+  id               String     @id @default(cuid())
+  userId           String
+  user             User       @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title            String
+  description      String?
+  estimatedMinutes Int
+  remainingMinutes Int
+  deadline         DateTime?  @db.Timestamptz
+  priority         Priority   @default(MEDIUM)
+  status           TaskStatus @default(PENDING)
+  isSplittable     Boolean    @default(true)
+  completedAt      DateTime?  @db.Timestamptz
+  createdAt        DateTime   @default(now()) @db.Timestamptz
+  updatedAt        DateTime   @updatedAt @db.Timestamptz
+  deletedAt        DateTime?  @db.Timestamptz
+
+  blocks ScheduleBlock[]
+
+  @@index([userId, status, deadline]) // scheduler input: open tasks by urgency
+  @@index([userId, deadline])
+  @@index([deletedAt])
+}
+
+// --------------------------- SCHEDULES -------------------------------
+
+model DailySchedule {
+  id                String       @id @default(cuid())
+  userId            String
+  user              User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date              DateTime     @db.Date // user's local calendar day
+  mode              ScheduleMode @default(STANDARD)
+  isOverloaded      Boolean      @default(false)
+  totalSleepMinutes Int          @default(0)
+  generationMeta    Json? // {version, inputsHash, predictionId}
+  createdAt         DateTime     @default(now()) @db.Timestamptz
+  updatedAt         DateTime     @updatedAt @db.Timestamptz
+
+  blocks ScheduleBlock[]
+
+  @@unique([userId, date]) // one schedule per user per day
+  @@index([userId, date])
+}
+
+model ScheduleBlock {
+  id            String        @id @default(cuid())
+  scheduleId    String
+  schedule      DailySchedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  activityType  ActivityType
+  title         String? // e.g. task title or "Lunch"
+  taskId        String?
+  task          Task?         @relation(fields: [taskId], references: [id], onDelete: SetNull)
+  startTime     DateTime      @db.Timestamptz
+  endTime       DateTime      @db.Timestamptz
+  isFixed       Boolean       @default(false)
+  isHealthBlock Boolean       @default(false)
+
+  completion CompletionLog?
+
+  @@index([scheduleId])
+  @@index([taskId])
+}
+
+// --------------------------- CHECKLIST -------------------------------
+
+model CompletionLog {
+  id            String           @id @default(cuid())
+  blockId       String           @unique
+  block         ScheduleBlock    @relation(fields: [blockId], references: [id], onDelete: Cascade)
+  userId        String
+  user          User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activityType  ActivityType // denormalized for fast analytics grouping
+  status        CompletionStatus
+  actualMinutes Int?
+  completedAt   DateTime         @default(now()) @db.Timestamptz
+
+  @@index([userId, completedAt])
+  @@index([userId, activityType, completedAt])
+}
+
+// --------------------------- AI / PRODUCTIVITY -----------------------
+
+model ProductivityProfile {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  timeBucket     Int      @db.SmallInt // 0..23 hour-of-day
+  weekday        Int?     @db.SmallInt // 0..6, null = all days
+  completionRate Decimal  @db.Decimal(5, 4) // 0.0000..1.0000
+  sampleSize     Int
+  lastUpdated    DateTime @updatedAt @db.Timestamptz
+
+  @@unique([userId, timeBucket, weekday])
+  @@index([userId])
+}
+
+model Prediction {
+  id               String   @id @default(cuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  targetDate       DateTime @db.Date
+  predictedWindows Json // [{start,end,confidence}]
+  modelVersion     String   @default("v1")
+  generatedAt      DateTime @default(now()) @db.Timestamptz
+
+  @@unique([userId, targetDate])
+}
+
+model OverloadEvent {
+  id          String       @id @default(cuid())
+  userId      String
+  user        User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date        DateTime     @db.Date
+  mode        ScheduleMode
+  triggeredAt DateTime     @default(now()) @db.Timestamptz
+
+  @@index([userId, triggeredAt]) // enforces the once-per-48h rule
+}
+
+// --------------------------- ANALYTICS (ROLLUP) ----------------------
+
+model DailyStat {
+  id                  String   @id @default(cuid())
+  userId              String
+  user                User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  date                DateTime @db.Date
+  sleepMinutes        Int      @default(0)
+  exerciseMinutes     Int      @default(0)
+  workMinutes         Int      @default(0)
+  tasksCompleted      Int      @default(0)
+  tasksScheduled      Int      @default(0)
+  onTimeRate          Decimal? @db.Decimal(5, 4)
+  healthAdherenceRate Decimal? @db.Decimal(5, 4)
+  minutesByActivity   Json     @default("{}") // {SLEEP:480, MEAL:90, ...}
+  updatedAt           DateTime @updatedAt @db.Timestamptz
+
+  @@unique([userId, date])
+  @@index([userId, date]) // weekly/monthly range scans
+}
+
+// --------------------------- BILLING ---------------------------------
+
+model Subscription {
+  id                   String             @id @default(cuid())
+  userId               String             @unique
+  user                 User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tier                 SubscriptionTier   @default(FREE)
+  status               SubscriptionStatus @default(ACTIVE)
+  stripeCustomerId     String?            @unique
+  stripeSubscriptionId String?            @unique
+  stripePriceId        String?
+  currentPeriodEnd     DateTime?          @db.Timestamptz
+  cancelAtPeriodEnd    Boolean            @default(false)
+  createdAt            DateTime           @default(now()) @db.Timestamptz
+  updatedAt            DateTime           @updatedAt @db.Timestamptz
+
+  @@index([status, currentPeriodEnd])
+}
