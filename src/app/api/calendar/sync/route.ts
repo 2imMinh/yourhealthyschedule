@@ -31,7 +31,7 @@ async function getGoogleToken(
 ): Promise<{ token: string; scopes: string[] } | null> {
   for (const provider of ["google", "oauth_google"]) {
     try {
-      const r = await cc.users.getUserOauthAccessToken(userId, provider);
+      const r = await cc.users.getUserOauthAccessToken(userId, provider as "oauth_google");
       const first = (r?.data ?? [])[0];
       if (first?.token) {
         // Clerk returns scopes as string[] or a space/comma-joined string.

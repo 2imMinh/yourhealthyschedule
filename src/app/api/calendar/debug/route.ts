@@ -19,7 +19,7 @@ export async function GET() {
     const result: Record<string, unknown> = { connectedGoogle: false };
     for (const provider of ["google", "oauth_google"]) {
       try {
-        const r = await cc.users.getUserOauthAccessToken(user.id, provider);
+        const r = await cc.users.getUserOauthAccessToken(user.id, provider as "oauth_google");
         const first = (r?.data ?? [])[0] as { token?: string; scopes?: string[] | string } | undefined;
         if (first?.token) {
           const raw = first.scopes ?? [];
