@@ -38,7 +38,7 @@ export function ok<T>(data: T, init?: ResponseInit) {
   return NextResponse.json({ data }, init);
 }
 
-function errorResponse(
+export function errorResponse(
   status: number,
   code: string,
   message: string,

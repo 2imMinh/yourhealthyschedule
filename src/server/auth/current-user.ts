@@ -43,6 +43,17 @@ export async function getCurrentUser(): Promise<UserWithRelations | null> {
     clerkUser?.emailAddresses?.[0]?.emailAddress ??
     `${userId}@placeholder.local`;
 
+  // A previous account with this email may still exist (soft-deleted) after the
+  // user deleted & recreated their Clerk account. Since email is unique, release
+  // it from that orphaned row so the new Clerk user id can claim the email.
+  const sameEmail = await prisma.user.findUnique({ where: { email } });
+  if (sameEmail && sameEmail.id !== userId) {
+    await prisma.user.update({
+      where: { id: sameEmail.id },
+      data: { email: `released+${sameEmail.id}@deleted.local`, deletedAt: new Date() },
+    });
+  }
+
   return prisma.user.upsert({
     where: { id: userId },
     update: { deletedAt: null }, // un-soft-delete if they returned

@@ -3,7 +3,7 @@
 
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Sparkles, AlertTriangle, Loader2, ShieldAlert, ChevronLeft, ChevronRight, Pencil, List, Table2, PieChart, Plus } from "lucide-react";
+import { Sparkles, AlertTriangle, Loader2, ShieldAlert, ChevronLeft, ChevronRight, Pencil, List, Table2, PieChart, Plus, CalendarCheck } from "lucide-react";
 import { api, ApiClientError } from "@/lib/api";
 import { formatTime, cn } from "@/lib/utils";
 import { activityMeta } from "@/components/schedule/activity-meta";
@@ -54,6 +54,7 @@ export function DashboardView() {
   const [isPremium, setIsPremium] = useState(false);
   const [view, setView] = useState<"list" | "table" | "pie">("list");
   const [addEventOpen, setAddEventOpen] = useState(false);
+  const [syncing, setSyncing] = useState(false);
   const [offset, setOffset] = useState(0); // 0 = hôm nay
   const [schedule, setSchedule] = useState<Schedule | null>(null);
   const [warnings, setWarnings] = useState<Warning[]>([]);
@@ -164,6 +165,23 @@ export function DashboardView() {
     }
   }
 
+  async function syncGoogle() {
+    if (!isPremium) {
+      toast.error(t("gcal.premium"));
+      return;
+    }
+    setSyncing(true);
+    try {
+      const res = (await api.syncCalendar(dateStrOf(0), maxDays)) as { synced: number; empty?: boolean };
+      if (res.empty) toast.error(t("gcal.empty"));
+      else toast.success(t("gcal.done", { n: String(res.synced) }));
+    } catch (err) {
+      toast.error(err instanceof ApiClientError ? err.message : t("gcal.err"));
+    } finally {
+      setSyncing(false);
+    }
+  }
+
   function blockLabel(b: Block) {
     // Show the user-entered name for tasks AND fixed activities/events;
     // health blocks (sleep/meal/…) have no title and fall back to the type label.
@@ -210,6 +228,10 @@ export function DashboardView() {
         <Button variant="outline" size="sm" onClick={() => setAddEventOpen(true)} disabled={generating}>
           <Plus className="mr-1 h-4 w-4" />
           {t("sched.addEvent")}
+        </Button>
+        <Button variant="outline" size="sm" onClick={syncGoogle} disabled={syncing || generating}>
+          {syncing ? <Loader2 className="mr-1 h-4 w-4 animate-spin" /> : <CalendarCheck className="mr-1 h-4 w-4" />}
+          {t("gcal.sync")}{!isPremium ? " ★" : ""}
         </Button>
         <Button variant="outline" size="sm" onClick={() => setEmergencyOpen(true)} disabled={generating}>
           <ShieldAlert className="mr-1 h-4 w-4" />

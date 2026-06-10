@@ -77,6 +77,13 @@ export const api = {
   getSchedule: (date: string, rangeDays = 1) =>
     request(`/schedule?date=${date}&rangeDays=${rangeDays}`),
 
+  // Google Calendar sync (premium)
+  syncCalendar: (date: string, rangeDays: number) =>
+    request<{ synced: number; empty?: boolean; calendarId?: string }>("/calendar/sync", {
+      method: "POST",
+      body: JSON.stringify({ date, rangeDays }),
+    }),
+
   // Fixed commitments (timetable / work schedule)
   listCommitments: () =>
     request<{ commitments: Commitment[] }>("/commitments"),
